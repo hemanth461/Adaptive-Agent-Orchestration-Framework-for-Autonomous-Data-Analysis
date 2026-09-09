@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+**/data/app.db
+**/data/outputs/
+eval_results.csv
+venv/
+.venv/
+*.egg-info/
+.DS_Store
