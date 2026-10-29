@@ -15,6 +15,7 @@ Features:
 - Preset demo datasets for frictionless 1-click evaluation
 """
 import os
+import sys
 import json
 import io
 import time
@@ -23,8 +24,33 @@ import requests
 import pandas as pd
 import streamlit as st
 
+BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "backend"))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000")
 SAMPLE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data", "sample_datasets"))
+
+def _run_direct_pipeline(files_to_process, query_text):
+    """
+    Direct in-process execution fallback.
+    If the separate FastAPI process was killed by the OS (e.g. OOM on 512MB RAM)
+    or connection was refused, this runs the exact same graph in-process with ZERO HTTP overhead.
+    """
+    from app.core.session_runner import run_session
+    from app.api.main import _serialize_result
+    from app.db.connection import init_db
+    init_db()
+
+    dataframes = []
+    dataset_names = []
+    for fname, fcontent in files_to_process:
+        df = pd.read_csv(io.BytesIO(fcontent))
+        dataframes.append(df)
+        dataset_names.append(fname)
+
+    raw_result = run_session(dataframes, dataset_names, query_text)
+    return _serialize_result(raw_result)
 
 # --- Auto-start Backend if running together in a unified deployment ---
 @st.cache_resource
@@ -383,6 +409,8 @@ if run_submitted:
             ("files", (fname, fcontent, "text/csv")) for fname, fcontent in files_to_process
         ]
         with st.spinner("Analyzing dataset & routing to the optimal architecture..."):
+            result_data = None
+            # Attempt 1: Try FastAPI backend service if reachable
             try:
                 response = requests.post(
                     f"{API_BASE}/analyze",
@@ -391,16 +419,20 @@ if run_submitted:
                     timeout=180,
                 )
                 if response.status_code == 200:
-                    st.session_state.result = response.json()
-                else:
-                    detail = response.text
-                    try:
-                        detail = response.json().get("detail", detail)
-                    except Exception:
-                        pass
-                    st.error(f"Analysis failed (HTTP {response.status_code}): {detail}")
-            except requests.exceptions.RequestException as e:
-                st.error(f"Failed to connect to backend: {e}")
+                    result_data = response.json()
+            except Exception:
+                pass
+
+            # Attempt 2: Seamless fallback to in-process execution (guaranteed to never fail with Connection Refused)
+            if not result_data:
+                try:
+                    result_data = _run_direct_pipeline(files_to_process, query_input)
+                except Exception as ex:
+                    st.error(f"Analysis failed: {ex}")
+
+            if result_data:
+                st.session_state.result = result_data
+                st.rerun()
 
 # ==============================================================================
 # RESULTS DISPLAY
@@ -748,20 +780,35 @@ if result:
                         use_container_width=True,
                     )
                 else:
+                    csv_bytes = None
                     try:
-                        csv_resp = requests.get(f"{API_BASE}/dataset/{session_id}/download-cleaned", timeout=10)
+                        csv_resp = requests.get(f"{API_BASE}/dataset/{session_id}/download-cleaned", timeout=5)
                         if csv_resp.status_code == 200:
-                            st.download_button(
-                                label="⬇️ Download Cleaned CSV File",
-                                data=csv_resp.content,
-                                file_name=f"cleaned_dataset_{session_id[:8]}.csv",
-                                mime="text/csv",
-                                type="primary",
-                                use_container_width=True,
-                            )
-                        else:
-                            st.caption("Cleaned CSV currently unavailable.")
+                            csv_bytes = csv_resp.content
                     except Exception:
+                        pass
+
+                    if not csv_bytes:
+                        csv_disk_path = os.path.normpath(os.path.join(
+                            os.path.dirname(__file__), "..", "backend", "data", "outputs", session_id, "cleaned_dataset.csv"
+                        ))
+                        if os.path.isfile(csv_disk_path):
+                            try:
+                                with open(csv_disk_path, "rb") as cf:
+                                    csv_bytes = cf.read()
+                            except Exception:
+                                pass
+
+                    if csv_bytes:
+                        st.download_button(
+                            label="⬇️ Download Cleaned CSV File",
+                            data=csv_bytes,
+                            file_name=f"cleaned_dataset_{session_id[:8]}.csv",
+                            mime="text/csv",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    else:
                         st.caption("Cleaned CSV currently unavailable.")
 
             # Table preview
@@ -1052,20 +1099,35 @@ if result:
                     use_container_width=True,
                 )
             with col_rep2:
+                pdf_bytes = None
                 try:
-                    pdf_response = requests.get(f"{API_BASE}/report/{session_id}/download", timeout=15)
+                    pdf_response = requests.get(f"{API_BASE}/report/{session_id}/download", timeout=6)
                     if pdf_response.status_code == 200:
-                        st.download_button(
-                            "📑 Download Full Report (PDF with Embedded Charts)",
-                            pdf_response.content,
-                            file_name=f"analysis_report_{session_id[:8]}.pdf",
-                            mime="application/pdf",
-                            type="primary",
-                            use_container_width=True,
-                        )
-                    else:
-                        st.caption("PDF generation is finalizing.")
+                        pdf_bytes = pdf_response.content
                 except Exception:
-                    st.caption("Backend PDF service currently unreachable.")
+                    pass
+
+                if not pdf_bytes:
+                    pdf_disk_path = os.path.normpath(os.path.join(
+                        os.path.dirname(__file__), "..", "backend", "data", "outputs", session_id, "report.pdf"
+                    ))
+                    if os.path.isfile(pdf_disk_path):
+                        try:
+                            with open(pdf_disk_path, "rb") as pf:
+                                pdf_bytes = pf.read()
+                        except Exception:
+                            pass
+
+                if pdf_bytes:
+                    st.download_button(
+                        "📑 Download Full Report (PDF with Embedded Charts)",
+                        pdf_bytes,
+                        file_name=f"analysis_report_{session_id[:8]}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True,
+                    )
+                else:
+                    st.caption("PDF report currently finalizing.")
         else:
             st.info("Report not yet generated.")

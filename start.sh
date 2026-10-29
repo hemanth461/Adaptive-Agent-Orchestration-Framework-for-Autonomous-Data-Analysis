@@ -1,6 +1,13 @@
 #!/bin/bash
-# 1. Start FastAPI backend in background on internal port 8000
-python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --app-dir backend &
+# 1. Background supervisor to keep FastAPI backend running on internal port 8000
+(
+  while true; do
+    echo "Starting FastAPI backend..."
+    python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --app-dir backend
+    echo "FastAPI exited with code $?. Restarting in 2s..."
+    sleep 2
+  done
+) &
 
 # 2. Wait for backend to be ready
 for i in 1 2 3 4 5 6 7 8 9 10; do
