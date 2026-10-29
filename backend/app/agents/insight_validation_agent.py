@@ -188,12 +188,16 @@ Respond with ONLY valid JSON in this shape:
             for g in res:
                 ev[f"{g}_n"] = res[g].get("count", 30)
 
+            is_financial = any(k in val_col.lower() for k in ["spend", "sales", "revenue", "cost", "price", "budget", "amount", "salary"])
+            unit_prefix = "$" if is_financial else ""
+            unit_suffix = " cm" if "cm" in val_col.lower() else ""
+
             fallback.append({
                 "title": f"Segment Performance Gap: {val_col.replace('_', ' ').title()} by {grp_col.replace('_', ' ').title()}",
-                "claim": f"Across {total_n} observations, {highest_grp} achieved the highest average {val_col.replace('_', ' ')} (${h_mean:,.2f}), outperforming {lowest_grp} (${l_mean:,.2f}) with a {spread_pct:.1f}% relative performance spread.",
+                "claim": f"Across {total_n} observations, {highest_grp} achieved the highest average {val_col.replace('_', ' ')} ({unit_prefix}{h_mean:,.2f}{unit_suffix}), outperforming {lowest_grp} ({unit_prefix}{l_mean:,.2f}{unit_suffix}) with a {spread_pct:.1f}% relative performance spread.",
                 "evidence": ev,
                 "claim_type": "group_comparison",
-                "business_takeaway": f"Scale top-performing customer success playbooks from {highest_grp} while developing targeted retention incentives for accounts in {lowest_grp}.",
+                "business_takeaway": f"Prioritize {highest_grp} as the primary benchmark segment while optimizing operations in {lowest_grp}.",
             })
 
             # 2. Volume & Concentration Insight
@@ -202,11 +206,11 @@ Respond with ONLY valid JSON in this shape:
             pct_volume = round((largest_n / (total_n + 1e-9)) * 100, 1)
 
             fallback.append({
-                "title": f"Cohort Concentration: {grp_col.replace('_', ' ').title()} Account Distribution",
-                "claim": f"{largest_grp} represents the dominant cohort comprising {largest_n} accounts ({pct_volume}% of total dataset volume), making it the primary volume driver of customer revenue.",
+                "title": f"Cohort Concentration: {grp_col.replace('_', ' ').title()} Distribution",
+                "claim": f"{largest_grp} represents the dominant cohort comprising {largest_n} records ({pct_volume}% of total dataset volume), making it the primary volume cohort in the dataset.",
                 "evidence": {"n": total_n, "cohort_count": largest_n, "cohort_percentage": pct_volume},
                 "claim_type": "general",
-                "business_takeaway": f"Maintain high-touch account management in {largest_grp} since even minor retention shifts in this cohort disproportionately affect overall revenue stability.",
+                "business_takeaway": f"Maintain close observational tracking in {largest_grp} as it constitutes the predominant cohort.",
             })
 
     # 3. Correlation & Driver Insight
@@ -225,7 +229,7 @@ Respond with ONLY valid JSON in this shape:
             strength = "strong" if abs(r_val) > 0.5 else ("moderate" if abs(r_val) > 0.25 else "slight")
             fallback.append({
                 "title": f"Metric Driver: Relationship Between {c1.replace('_', ' ').title()} and {c2.replace('_', ' ').title()}",
-                "claim": f"A {strength} {direction} correlation (r={r_val:.2f}) was measured between {c1.replace('_', ' ')} and {c2.replace('_', ' ')}, indicating observable cross-variable alignment across the customer base.",
+                "claim": f"A {strength} {direction} correlation (r={r_val:.2f}) was measured between {c1.replace('_', ' ')} and {c2.replace('_', ' ')}, indicating observable cross-variable alignment across the dataset observations.",
                 "evidence": {"correlation": round(r_val, 3), "n": 140},
                 "claim_type": "correlation",
                 "business_takeaway": f"Treat {c1.replace('_', ' ')} as an operational leading indicator when projecting expected trends in {c2.replace('_', ' ')}.",
@@ -245,10 +249,10 @@ Respond with ONLY valid JSON in this shape:
             std_val = col_stats.get("std", 0)
             fallback.append({
                 "title": f"Portfolio Baseline: {col.replace('_', ' ').title()} Distribution Benchmark",
-                "claim": f"{col.replace('_', ' ').title()} exhibits an average value of {mean_val:,.2f} with a median of {median_val:,.2f} (std: {std_val:,.2f}), providing an empirical baseline for customer segmentation.",
+                "claim": f"{col.replace('_', ' ').title()} exhibits an average value of {mean_val:,.2f} with a median of {median_val:,.2f} (std: {std_val:,.2f}), providing an empirical benchmark for comparative cohort evaluation.",
                 "evidence": {"mean": round(mean_val, 2), "median": round(median_val, 2), "std": round(std_val, 2), "n": 140},
                 "claim_type": "general",
-                "business_takeaway": f"Adopt {mean_val:,.2f} as the standard baseline benchmark to gauge effectiveness and evaluate return on investment for future product updates.",
+                "business_takeaway": f"Adopt {mean_val:,.2f} as the baseline reference value when evaluating future observational shifts.",
             })
 
     return fallback

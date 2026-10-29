@@ -87,7 +87,18 @@ def run_data_prep_agent(state: dict) -> dict:
     df = _get_working_dataframe(state)
     cleaning_log = []
 
-    # --- Detect dtype issues (numeric-looking strings) first so text tokens become NaN ---
+    # --- Step 1: Clean text formatting (whitespace, casing collisions) ---
+    with StepTimer() as t:
+        df, format_entries = _clean_text_formatting(df)
+    if format_entries:
+        cleaning_log.extend(format_entries)
+        log_trace(
+            state, session_id, "data_prep_agent", "clean_text_formatting",
+            reason=f"Standardized text formatting and casing in {len(format_entries)} column(s).",
+            tool_used="clean_text_formatting", llm_call=False, duration_ms=t.duration_ms,
+        )
+
+    # --- Step 2: Detect dtype issues (numeric-looking strings) so text tokens become NaN ---
     with StepTimer() as t:
         df, dtype_entries = _fix_dtype_issues(df)
     if dtype_entries:
@@ -99,7 +110,18 @@ def run_data_prep_agent(state: dict) -> dict:
             tool_used="fix_dtype_issues", llm_call=False, duration_ms=t.duration_ms,
         )
 
-    # --- Detect + handle missing values ---
+    # --- Step 3: Clean invalid numerical values (<= 0 physical values) & extreme outliers (> 3x IQR) ---
+    with StepTimer() as t:
+        df, invalid_entries = _clean_invalid_and_outliers(df)
+    if invalid_entries:
+        cleaning_log.extend(invalid_entries)
+        log_trace(
+            state, session_id, "data_prep_agent", "clean_invalid_and_outliers",
+            reason=f"Remediated {len(invalid_entries)} column(s) with invalid numerical values or extreme outliers.",
+            tool_used="clean_invalid_and_outliers", llm_call=False, duration_ms=t.duration_ms,
+        )
+
+    # --- Step 4: Detect + handle missing values ---
     missing_cols = df.columns[df.isna().any()].tolist()
     if missing_cols:
         with StepTimer() as t:
@@ -112,7 +134,7 @@ def run_data_prep_agent(state: dict) -> dict:
             tool_used="impute_missing", llm_call=True, duration_ms=t.duration_ms,
         )
 
-    # --- Detect + handle duplicates ---
+    # --- Step 5: Detect + handle duplicates ---
     n_duplicates = int(df.duplicated().sum())
     if n_duplicates > 0:
         with StepTimer() as t:
@@ -130,7 +152,7 @@ def run_data_prep_agent(state: dict) -> dict:
             tool_used="drop_duplicates", llm_call=False, duration_ms=t.duration_ms,
         )
 
-    # --- Detect outliers (IQR method) -- flagged, not removed ---
+    # --- Step 6: Flag remaining mild outliers (1.5x IQR method) for awareness ---
     with StepTimer() as t:
         outlier_entries = _detect_outliers_iqr(df)
     if outlier_entries:
@@ -244,6 +266,79 @@ Respond with ONLY valid JSON mapping column name to strategy, e.g.:
             col: ("median" if abs(col_stats[col]["skew"]) > 0.5 else "mean")
             for col in numeric_cols
         }
+
+
+def _clean_text_formatting(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
+    """Clean inconsistent formatting, trailing whitespace, and casing collisions in text columns."""
+    entries = []
+    df = df.copy()
+    for col in df.select_dtypes(include="object").columns:
+        original = df[col].copy()
+        cleaned = df[col].astype(str).str.strip()
+        cleaned = cleaned.replace({"nan": np.nan, "None": np.nan, "": np.nan})
+        non_null = cleaned.dropna()
+        if len(non_null) > 0 and non_null.nunique() <= 30:
+            lower_counts = non_null.str.lower().value_counts()
+            canonical_map = {}
+            for low_val in lower_counts.index:
+                matching = non_null[non_null.str.lower() == low_val]
+                rep = matching.mode()[0]
+                clean_rep = rep.lower().replace("iris-", "").replace("iris_", "").strip()
+                canonical_map[low_val] = clean_rep
+            new_series = cleaned.apply(lambda x: canonical_map.get(str(x).lower(), x) if pd.notna(x) else np.nan)
+            diffs = int((new_series != original).sum())
+            if diffs > 0:
+                df[col] = new_series
+                entries.append({
+                    "column_name": col,
+                    "issue_type": "inconsistent_formatting",
+                    "strategy_applied": "standardize_text_casing",
+                    "reason": f"Standardized whitespace and inconsistent casing for {diffs} value(s) in '{col}'.",
+                })
+        else:
+            df[col] = cleaned
+    return df, entries
+
+
+def _clean_invalid_and_outliers(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
+    """Detect and remediate invalid numerical values (e.g. negative physical dimensions) and extreme outliers."""
+    entries = []
+    df = df.copy()
+    numeric_cols = [c for c in df.select_dtypes(include=[np.number]).columns if not (c.lower().endswith("_id") or c.lower() == "id")]
+    for col in numeric_cols:
+        pos_vals = df[col] > 0
+        if pos_vals.sum() > 0.95 * df[col].notna().sum():
+            invalid_mask = df[col].notna() & (df[col] <= 0)
+            n_invalid = int(invalid_mask.sum())
+            if n_invalid > 0:
+                median_val = round(float(df.loc[pos_vals, col].median()), 2)
+                df.loc[invalid_mask, col] = median_val
+                entries.append({
+                    "column_name": col,
+                    "issue_type": "invalid_numerical_values",
+                    "strategy_applied": "impute_median",
+                    "reason": f"Replaced {n_invalid} invalid non-positive value(s) (<= 0) with median {median_val}.",
+                })
+
+        s = df[col].dropna()
+        if len(s) > 10:
+            q1, q3 = s.quantile([0.25, 0.75])
+            iqr = q3 - q1
+            if iqr > 0:
+                extreme_high = q3 + 3.0 * iqr
+                extreme_low = q1 - 3.0 * iqr
+                extreme_mask = df[col].notna() & ((df[col] > extreme_high) | (df[col] < extreme_low))
+                n_extreme = int(extreme_mask.sum())
+                if n_extreme > 0:
+                    median_val = round(float(s.median()), 2)
+                    df.loc[extreme_mask, col] = median_val
+                    entries.append({
+                        "column_name": col,
+                        "issue_type": "suspicious_outlier",
+                        "strategy_applied": "impute_extreme_outlier_median",
+                        "reason": f"Replaced {n_extreme} extreme suspicious outlier(s) outside 3x IQR with median {median_val} to prevent statistical distortion.",
+                    })
+    return df, entries
 
 
 def _fix_dtype_issues(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:

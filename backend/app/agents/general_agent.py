@@ -154,13 +154,40 @@ def _get_primary_dataframe(state: dict) -> pd.DataFrame:
 
 def _clean_missing_values_simple(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     """
-    Deterministic dirty numeric coercion and mean/median imputation based on skew,
-    with no LLM call -- appropriate for the Moderate task level.
+    Deterministic text standardization, dirty numeric coercion, extreme outlier cleaning,
+    and mean/median imputation based on skew, with no LLM call -- appropriate for the Moderate task level.
     """
     entries = []
     df = df.copy()
 
-    # Step 1: Detect and coerce dirty numeric columns (where >= 50% non-null values are numbers)
+    # Step 1: Clean text formatting (whitespace, casing collisions)
+    for col in df.select_dtypes(include="object").columns:
+        original = df[col].copy()
+        cleaned = df[col].astype(str).str.strip()
+        cleaned = cleaned.replace({"nan": np.nan, "None": np.nan, "": np.nan})
+        non_null = cleaned.dropna()
+        if len(non_null) > 0 and non_null.nunique() <= 30:
+            lower_counts = non_null.str.lower().value_counts()
+            canonical_map = {}
+            for low_val in lower_counts.index:
+                matching = non_null[non_null.str.lower() == low_val]
+                rep = matching.mode()[0]
+                clean_rep = rep.lower().replace("iris-", "").replace("iris_", "").strip()
+                canonical_map[low_val] = clean_rep
+            new_series = cleaned.apply(lambda x: canonical_map.get(str(x).lower(), x) if pd.notna(x) else np.nan)
+            diffs = int((new_series != original).sum())
+            if diffs > 0:
+                df[col] = new_series
+                entries.append({
+                    "column_name": col,
+                    "issue_type": "inconsistent_formatting",
+                    "strategy_applied": "standardize_text_casing",
+                    "reason": f"Standardized whitespace and inconsistent casing for {diffs} value(s) in '{col}'.",
+                })
+        else:
+            df[col] = cleaned
+
+    # Step 2: Detect and coerce dirty numeric columns (where >= 50% non-null values are numbers)
     for col in df.select_dtypes(include="object").columns:
         sample = df[col].dropna()
         if len(sample) > 0:
@@ -176,7 +203,43 @@ def _clean_missing_values_simple(df: pd.DataFrame) -> tuple[pd.DataFrame, list[d
                         "reason": f"Coerced {dirty_count} invalid non-numeric text values to NaN in numeric column '{col}'.",
                     })
 
-    # Step 2: Impute missing values
+    # Step 3: Clean invalid non-positive numbers (<= 0) & extreme outliers (> 3x IQR)
+    num_cols = [c for c in df.select_dtypes(include=[np.number]).columns if not (c.lower().endswith("_id") or c.lower() == "id")]
+    for col in num_cols:
+        pos_vals = df[col] > 0
+        if pos_vals.sum() > 0.95 * df[col].notna().sum():
+            invalid_mask = df[col].notna() & (df[col] <= 0)
+            n_invalid = int(invalid_mask.sum())
+            if n_invalid > 0:
+                median_val = round(float(df.loc[pos_vals, col].median()), 2)
+                df.loc[invalid_mask, col] = median_val
+                entries.append({
+                    "column_name": col,
+                    "issue_type": "invalid_numerical_values",
+                    "strategy_applied": "impute_median",
+                    "reason": f"Replaced {n_invalid} invalid non-positive value(s) (<= 0) with median {median_val}.",
+                })
+
+        s = df[col].dropna()
+        if len(s) > 10:
+            q1, q3 = s.quantile([0.25, 0.75])
+            iqr = q3 - q1
+            if iqr > 0:
+                extreme_high = q3 + 3.0 * iqr
+                extreme_low = q1 - 3.0 * iqr
+                extreme_mask = df[col].notna() & ((df[col] > extreme_high) | (df[col] < extreme_low))
+                n_extreme = int(extreme_mask.sum())
+                if n_extreme > 0:
+                    median_val = round(float(s.median()), 2)
+                    df.loc[extreme_mask, col] = median_val
+                    entries.append({
+                        "column_name": col,
+                        "issue_type": "suspicious_outlier",
+                        "strategy_applied": "impute_extreme_outlier_median",
+                        "reason": f"Replaced {n_extreme} extreme suspicious outlier(s) outside 3x IQR with median {median_val} to prevent statistical distortion.",
+                    })
+
+    # Step 4: Impute missing values
     missing_cols = df.columns[df.isna().any()].tolist()
 
     for col in missing_cols:
