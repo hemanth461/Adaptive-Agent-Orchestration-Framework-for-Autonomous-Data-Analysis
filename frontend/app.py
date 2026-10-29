@@ -455,6 +455,8 @@ if result:
     total_rows = sum(d.get("n_rows", 0) for d in ds_list)
     total_cols = max((d.get("n_columns", 0) for d in ds_list), default=0)
     cleaned_rows = result.get("cleaned_rows", total_rows)
+    rows_dropped = total_rows - cleaned_rows
+    cleaned_sub = f"-{rows_dropped:,} duplicate rows" if rows_dropped > 0 else "100% rows preserved"
     n_cleaning_actions = len(result.get("cleaning_log", []))
     n_charts = len(result.get("visualizations", []))
     n_insights = len(result.get("validation_results", []))
@@ -477,7 +479,7 @@ if result:
             <div class="metric-card">
                 <div class="metric-title">Data Health Fixes</div>
                 <div class="metric-value">{n_cleaning_actions}</div>
-                <div class="metric-sub">Auto-remediated issues</div>
+                <div class="metric-sub">Across columns & dupes</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -488,7 +490,7 @@ if result:
             <div class="metric-card">
                 <div class="metric-title">Cleaned Rows</div>
                 <div class="metric-value">{cleaned_rows:,}</div>
-                <div class="metric-sub">Ready for export</div>
+                <div class="metric-sub">{cleaned_sub}</div>
             </div>
             """,
             unsafe_allow_html=True,
