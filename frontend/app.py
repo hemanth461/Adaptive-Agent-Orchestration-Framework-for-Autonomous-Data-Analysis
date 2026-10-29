@@ -17,12 +17,38 @@ Features:
 import os
 import json
 import io
+import time
+import subprocess
 import requests
 import pandas as pd
 import streamlit as st
 
 API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000")
 SAMPLE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data", "sample_datasets"))
+
+# --- Auto-start Backend if running together in a unified deployment ---
+def _ensure_backend_running():
+    if "127.0.0.1" in API_BASE or "localhost" in API_BASE:
+        try:
+            r = requests.get(f"{API_BASE}/health", timeout=0.8)
+            if r.status_code == 200:
+                return
+        except Exception:
+            pass
+
+        backend_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "backend"))
+        if os.path.isdir(backend_dir):
+            try:
+                subprocess.Popen([
+                    "python", "-m", "uvicorn", "app.api.main:app",
+                    "--host", "127.0.0.1", "--port", "8000",
+                    "--app-dir", backend_dir
+                ])
+                time.sleep(2.5)
+            except Exception:
+                pass
+
+_ensure_backend_running()
 
 # --- Page Config ---
 st.set_page_config(
