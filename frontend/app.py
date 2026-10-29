@@ -19,10 +19,17 @@ import sys
 import json
 import io
 import time
-import subprocess
 import requests
 import pandas as pd
 import streamlit as st
+
+# --- Page Config (Must be first Streamlit command) ---
+st.set_page_config(
+    page_title="Adaptive Agent Orchestration",
+    page_icon="🧭",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "backend"))
 if BACKEND_DIR not in sys.path:
@@ -51,43 +58,6 @@ def _run_direct_pipeline(files_to_process, query_text):
 
     raw_result = run_session(dataframes, dataset_names, query_text)
     return _serialize_result(raw_result)
-
-# --- Auto-start Backend if running together in a unified deployment ---
-@st.cache_resource
-def _ensure_backend_running():
-    if "127.0.0.1" in API_BASE or "localhost" in API_BASE:
-        # Check if already running
-        for _ in range(3):
-            try:
-                r = requests.get(f"{API_BASE}/health", timeout=1.0)
-                if r.status_code == 200:
-                    return True
-            except Exception:
-                time.sleep(1)
-
-        # Fallback start if running standalone
-        backend_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "backend"))
-        if os.path.isdir(backend_dir):
-            try:
-                subprocess.Popen([
-                    "python", "-m", "uvicorn", "app.api.main:app",
-                    "--host", "127.0.0.1", "--port", "8000",
-                    "--app-dir", backend_dir
-                ])
-                time.sleep(2.5)
-            except Exception:
-                pass
-    return True
-
-_ensure_backend_running()
-
-# --- Page Config ---
-st.set_page_config(
-    page_title="Adaptive Agent Orchestration",
-    page_icon="🧭",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 # --- Modern Professional CSS ---
 st.markdown(
