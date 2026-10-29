@@ -808,7 +808,11 @@ if result:
             for i, v in enumerate(vizs):
                 filename = os.path.basename(v.get("path", ""))
                 chart_name = v.get("type", "chart").replace("_", " ").title()
-                cols = ", ".join(v.get("columns", []))
+                cols_list = v.get("columns", [])
+                if len(cols_list) > 4:
+                    cols_desc = f"Top {len(cols_list)} Key Features"
+                else:
+                    cols_desc = ", ".join(cols_list)
 
                 # Load image from local disk path or fetch bytes server-side
                 img_data = None
@@ -824,7 +828,7 @@ if result:
                         pass
 
                 with st.container():
-                    st.markdown(f"#### 📊 {chart_name} ({cols})")
+                    st.markdown(f"#### 📊 {chart_name} ({cols_desc})")
                     if img_data:
                         st.image(img_data, use_container_width=True)
                     else:

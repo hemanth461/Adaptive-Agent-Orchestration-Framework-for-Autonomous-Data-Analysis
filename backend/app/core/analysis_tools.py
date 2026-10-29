@@ -84,13 +84,17 @@ def groupby_compare(df: pd.DataFrame, group_col: str, value_col: str, max_groups
 def plot_bar(df: pd.DataFrame, category_col: str, value_col: str, session_id: str) -> dict:
     out_dir = _ensure_output_dir(session_id)
     grouped = df.groupby(category_col)[value_col].mean().sort_values(ascending=False)
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    grouped.plot(kind="bar", ax=ax, color="#4C72B0")
-    ax.set_title(f"Average {value_col} by {category_col}")
-    ax.set_ylabel(value_col)
+    # If high cardinality, take top 12 to ensure legible presentation
+    if len(grouped) > 12:
+        grouped = grouped.head(12)
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    grouped.plot(kind="bar", ax=ax, color="#3b82f6", edgecolor="#1d4ed8")
+    ax.set_title(f"Average {value_col} by {category_col} (Top {len(grouped)})", fontsize=11, fontweight="bold", pad=10)
+    ax.set_ylabel(value_col, fontsize=10)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=30, ha="right", fontsize=9)
     fig.tight_layout()
     path = os.path.join(out_dir, f"bar_{category_col}_{value_col}.png")
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=120, bbox_inches="tight")
     plt.close(fig)
     return {"type": "bar_chart", "path": path, "columns": [category_col, value_col]}
 
@@ -140,25 +144,53 @@ def plot_scatter(df: pd.DataFrame, col_x: str, col_y: str, session_id: str) -> d
     return {"type": "scatter_plot", "path": path, "columns": [col_x, col_y]}
 
 
-def plot_heatmap(df: pd.DataFrame, session_id: str) -> dict:
+def plot_heatmap(df: pd.DataFrame, session_id: str, max_cols: int = 12) -> dict:
     out_dir = _ensure_output_dir(session_id)
     numeric_df = df.select_dtypes(include=[np.number])
     id_like = [c for c in numeric_df.columns if c.lower().endswith("_id") or c.lower() == "id"]
     numeric_df = numeric_df.drop(columns=id_like)
+
+    # Filter out columns with zero variance (constants or mostly empty)
+    valid_cols = [c for c in numeric_df.columns if numeric_df[c].std() > 1e-5]
+    numeric_df = numeric_df[valid_cols]
+
     if numeric_df.shape[1] < 2:
         return {}
-    corr = numeric_df.corr()
-    fig, ax = plt.subplots(figsize=(6, 5))
+
+    # If dataset has many columns (like 80+ player attributes), pick top most variable columns
+    if numeric_df.shape[1] > max_cols:
+        variances = numeric_df.var().sort_values(ascending=False)
+        selected_cols = variances.head(max_cols).index.tolist()
+        numeric_df = numeric_df[selected_cols]
+
+    corr = numeric_df.corr().round(2)
+    n_vars = len(corr.columns)
+
+    # Dynamic figure sizing and clear typography
+    fig_size = max(7.0, min(10.0, n_vars * 0.72 + 1.2))
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size * 0.88))
     im = ax.imshow(corr, cmap="coolwarm", vmin=-1, vmax=1)
-    ax.set_xticks(range(len(corr.columns)))
-    ax.set_yticks(range(len(corr.columns)))
-    ax.set_xticklabels(corr.columns, rotation=45, ha="right")
-    ax.set_yticklabels(corr.columns)
-    fig.colorbar(im)
-    ax.set_title("Correlation Heatmap")
+
+    font_size = 9 if n_vars <= 10 else 8
+    ax.set_xticks(range(n_vars))
+    ax.set_yticks(range(n_vars))
+    ax.set_xticklabels(corr.columns, rotation=35, ha="right", fontsize=font_size)
+    ax.set_yticklabels(corr.columns, fontsize=font_size)
+
+    # Add numeric correlation values inside each cell for instant clarity
+    if n_vars <= 14:
+        for i in range(n_vars):
+            for j in range(n_vars):
+                val = corr.iloc[i, j]
+                text_color = "white" if abs(val) > 0.55 else "#0f172a"
+                ax.text(j, i, f"{val:.2f}", ha="center", va="center", color=text_color, fontsize=font_size - 1, fontweight="medium")
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.ax.tick_params(labelsize=8)
+    ax.set_title(f"Correlation Heatmap (Top {n_vars} Key Features)", fontsize=11, fontweight="bold", pad=12)
     fig.tight_layout()
     path = os.path.join(out_dir, "heatmap.png")
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=130, bbox_inches="tight")
     plt.close(fig)
     return {"type": "heatmap", "path": path, "columns": list(corr.columns)}
 
