@@ -38,7 +38,15 @@ def run_analysis_agent(state: dict) -> dict:
     analysis_results = {}
     visualizations = []
 
-    if "descriptive_stats" in operations:
+    # For complex multi-agent path, compute descriptive stats & correlation matrix
+    # whenever numeric columns exist, ensuring the downstream Insight & Validation Agent
+    # has complete quantitative evidence across metrics and segments.
+    numeric_cols_available = [
+        c for c, meta in column_profile.items()
+        if meta["is_numeric"] and not _looks_like_id_column(c, meta)
+    ]
+
+    if "descriptive_stats" in operations or numeric_cols_available:
         with StepTimer() as t:
             analysis_results["descriptive_stats"] = tools.describe_stats(df)
         log_trace(
@@ -47,7 +55,7 @@ def run_analysis_agent(state: dict) -> dict:
             tool_used="describe_stats", llm_call=False, duration_ms=t.duration_ms,
         )
 
-    if "correlation_analysis" in operations:
+    if "correlation_analysis" in operations or len(numeric_cols_available) >= 2:
         with StepTimer() as t:
             analysis_results["correlation_matrix"] = tools.correlation_matrix(df)
         log_trace(
