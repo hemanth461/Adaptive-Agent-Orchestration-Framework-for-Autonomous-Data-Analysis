@@ -135,6 +135,25 @@ def download_report_pdf(session_id: str):
     )
 
 
+@app.get("/dataset/{session_id}/download-cleaned")
+def download_cleaned_dataset(session_id: str):
+    """
+    Serves the cleaned CSV dataset generated during the pipeline run for this session.
+    """
+    csv_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "outputs", session_id, "cleaned_dataset.csv"
+    )
+    csv_path = os.path.normpath(csv_path)
+    if not os.path.isfile(csv_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Cleaned dataset not found for this session.",
+        )
+    return FileResponse(
+        csv_path, media_type="text/csv", filename=f"cleaned_dataset_{session_id[:8]}.csv"
+    )
+
+
 @app.get("/chart/{session_id}/{filename}")
 def get_chart(session_id: str, filename: str):
     path = os.path.join(
@@ -149,4 +168,20 @@ def get_chart(session_id: str, filename: str):
 def _serialize_result(state: dict) -> dict:
     """Strip non-JSON-serializable fields (dataframes) before returning to the client."""
     exclude = {"raw_datasets", "cleaned_data"}
-    return {k: v for k, v in state.items() if k not in exclude}
+    serialized = {k: v for k, v in state.items() if k not in exclude}
+
+    cleaned = state.get("cleaned_data")
+    if cleaned and len(cleaned) > 0 and isinstance(cleaned[0], pd.DataFrame):
+        df_clean = cleaned[0]
+        serialized["cleaned_csv_available"] = True
+        serialized["cleaned_csv_filename"] = state.get("cleaned_csv_filename", "cleaned_dataset.csv")
+        serialized["cleaned_rows"] = int(len(df_clean))
+        serialized["cleaned_columns"] = [str(c) for c in df_clean.columns]
+        serialized["cleaned_preview"] = json.loads(
+            df_clean.head(25).to_json(orient="records", date_format="iso")
+        )
+        serialized["cleaned_csv_text"] = df_clean.to_csv(index=False)
+    else:
+        serialized["cleaned_csv_available"] = False
+
+    return serialized

@@ -30,6 +30,8 @@ class AgentState(TypedDict, total=False):
     # Working data
     cleaned_data: List[pd.DataFrame]
     cleaning_log: List[dict]
+    cleaned_csv_path: Optional[str]
+    cleaned_csv_filename: Optional[str]
 
     analysis_results: dict
     visualizations: List[dict]

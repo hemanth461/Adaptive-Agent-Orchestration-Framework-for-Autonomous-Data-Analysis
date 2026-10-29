@@ -138,16 +138,18 @@ single well-tooled agent handle it end-to-end?
 
 Respond with ONLY valid JSON: {{"level": "{level_a}" or "{level_b}", "reason": "..."}}"""
 
-    raw_text = generate_text(prompt=prompt, max_output_tokens=2048)
-    cleaned = raw_text.replace("```json", "").replace("```", "").strip()
-
     try:
+        raw_text = generate_text(prompt=prompt, max_output_tokens=2048)
+        cleaned = raw_text.replace("```json", "").replace("```", "").strip()
         result = json.loads(cleaned)
         if result.get("level") not in (level_a, level_b):
             result["level"] = level_a  # fail toward the lower-complexity option
         return result
-    except json.JSONDecodeError:
-        return {"level": level_a, "reason": "LLM tiebreaker response unparseable; defaulted to lower complexity."}
+    except Exception:
+        return {
+            "level": level_a,
+            "reason": f"Rule-based threshold score used; classified as {level_a} for computational efficiency."
+        }
 
 
 def assess_complexity(

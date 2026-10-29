@@ -9,6 +9,8 @@ complex_path = data_prep_agent -> analysis_agent -> insight_validation_agent
                                         |    (bounded retry, max 1)
                                         +--------------------+
 """
+import os
+import pandas as pd
 from langgraph.graph import StateGraph, END
 
 from app.core.state import AgentState
@@ -22,6 +24,17 @@ from app.core.pdf_report import generate_pdf_report
 
 
 def _report_node(state: dict) -> dict:
+    session_id = state.get("session_id", "")
+    cleaned = state.get("cleaned_data")
+    if cleaned and len(cleaned) > 0 and isinstance(cleaned[0], pd.DataFrame):
+        out_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "outputs", session_id)
+        os.makedirs(out_dir, exist_ok=True)
+        csv_filename = "cleaned_dataset.csv"
+        csv_path = os.path.join(out_dir, csv_filename)
+        cleaned[0].to_csv(csv_path, index=False)
+        state["cleaned_csv_path"] = csv_path
+        state["cleaned_csv_filename"] = csv_filename
+
     generate_report(state)
     pdf_path = generate_pdf_report(state)
     state["report_pdf_path"] = pdf_path

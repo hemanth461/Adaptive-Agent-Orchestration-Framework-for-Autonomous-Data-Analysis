@@ -1,0 +1,161 @@
+customer_id,region,annual_spend,loyalty_score,satisfaction_rating
+1001,North America,1108.23,75.5,4
+1002,Asia Pacific,660.88,55.2,1
+1003,Asia Pacific,594.63,52.6,4
+1004,Europe,1383.88,52.3,4
+1005,North America,927.23,72.2,3
+1006,Asia Pacific,1401.33,62.7,3
+1007,Europe,1212.66,78.1,1
+1008,Europe,1262.62,53.8,5
+1009,Europe,1533.33,78.9,4
+1010,North America,1181.91,63.3,4
+1011,Europe,383.47,89.5,4
+1012,Asia Pacific,765.34,86.3,2
+1013,Asia Pacific,,69.0,4
+1014,Asia Pacific,1699.17,73.5,5
+1015,North America,1176.01,75.4,3
+1016,Europe,1024.45,78.5,3
+1017,North America,851.95,68.2,
+1018,Asia Pacific,1336.51,87.3,4
+1019,Europe,,64.9,2
+1020,North America,888.55,45.0,3
+1021,Asia Pacific,1233.98,75.4,3
+1022,Asia Pacific,1225.48,70.5,5
+1023,North America,1135.3,83.7,5
+1024,Asia Pacific,1465.85,80.3,1
+1025,North America,889.15,73.8,4
+1026,Europe,902.29,73.5,3
+1027,Europe,1095.41,73.8,3
+1028,North America,1216.29,62.8,4
+1029,Asia Pacific,1115.56,55.0,3
+1030,Asia Pacific,1698.17,60.5,4
+1031,Asia Pacific,1049.03,70.7,1
+1032,Europe,,40.3,1
+1033,Asia Pacific,1053.4,65.9,3
+1034,Europe,1280.18,58.3,2
+1035,Europe,1089.28,70.8,5
+1036,Europe,1101.74,60.6,4
+1037,Europe,1605.92,72.9,4
+1038,Europe,1115.74,68.8,4
+1039,Europe,1629.28,90.1,1
+1040,Europe,1015.12,67.2,3
+1041,Europe,1082.8,68.6,4
+1042,Europe,1477.36,72.4,5
+1043,North America,580.08,46.5,4
+1044,Europe,781.54,57.0,3
+1045,Europe,1204.49,92.1,3
+1046,North America,1319.23,79.2,5
+1047,North America,1343.22,73.2,4
+1048,North America,1118.49,87.1,5
+1049,North America,838.68,69.5,2
+1050,Asia Pacific,1408.61,68.5,5
+1051,Asia Pacific,1311.59,67.8,2
+1052,Asia Pacific,914.66,47.1,3
+1053,Europe,1221.54,85.1,4
+1054,Asia Pacific,1655.31,69.4,2
+1055,Asia Pacific,1230.96,70.7,5
+1056,Europe,899.24,67.3,4
+1057,Europe,1091.74,63.1,2
+1058,Asia Pacific,1106.4,40.4,4
+1059,Europe,1285.94,74.1,3
+1060,Asia Pacific,1428.43,102.5,4
+1061,Europe,962.45,85.8,4
+1062,North America,1034.22,68.0,
+1063,Asia Pacific,1457.68,59.1,4
+1064,Europe,1386.85,72.4,4
+1065,Europe,,77.2,
+1066,Asia Pacific,828.49,70.3,3
+1067,North America,956.28,83.7,3
+1068,Asia Pacific,1454.39,58.7,4
+1069,North America,,86.9,4
+1070,Europe,1281.51,74.2,3
+1071,Asia Pacific,1185.32,64.3,5
+1072,Europe,1009.36,68.0,
+1073,North America,1571.73,76.9,
+1074,Europe,,82.7,4
+1075,Asia Pacific,1070.16,73.0,5
+1076,Asia Pacific,1158.48,80.1,5
+1077,North America,,105.6,4
+1078,Asia Pacific,798.5,49.1,5
+1079,Asia Pacific,,43.9,4
+1080,Europe,873.39,73.2,3
+1081,North America,663.9,58.5,4
+1082,Europe,1447.66,73.6,3
+1083,North America,,49.5,
+1084,North America,1501.58,73.9,3
+1085,North America,748.63,90.4,3
+1086,Europe,1300.51,87.5,2
+1087,Europe,1371.87,56.6,5
+1088,North America,1053.99,67.7,4
+1089,North America,1406.79,84.4,5
+1090,North America,915.12,97.5,5
+1091,Europe,925.73,58.7,4
+1092,North America,987.03,60.0,4
+1093,North America,1015.5,87.6,4
+1094,North America,942.55,67.0,5
+1095,North America,1443.08,57.6,3
+1096,Asia Pacific,926.83,86.7,3
+1097,North America,1080.7,48.5,4
+1098,North America,1036.93,62.4,4
+1099,Europe,1757.38,85.5,5
+1100,Europe,970.74,63.2,3
+1101,Asia Pacific,1318.51,82.7,2
+1102,Europe,1660.03,54.8,3
+1103,North America,898.51,82.9,3
+1104,Asia Pacific,987.96,78.6,4
+1105,Asia Pacific,1115.09,94.7,2
+1106,Europe,863.21,68.6,4
+1107,Europe,1509.13,67.1,3
+1108,Asia Pacific,1078.61,70.7,3
+1109,North America,1465.08,86.7,5
+1110,North America,1333.6,61.6,
+1111,North America,,70.0,4
+1112,Europe,1441.14,99.3,2
+1113,Europe,1122.52,82.9,4
+1114,Asia Pacific,1465.27,82.1,4
+1115,Europe,868.0,64.7,4
+1116,North America,1011.37,84.1,3
+1117,Asia Pacific,1503.48,55.7,3
+1118,Asia Pacific,671.08,51.1,5
+1119,North America,,58.8,1
+1120,North America,1095.82,91.8,2
+1121,North America,1061.9,74.3,4
+1122,Asia Pacific,1023.75,58.9,5
+1123,North America,1522.69,67.0,4
+1124,North America,815.52,78.3,5
+1125,North America,1408.8,88.5,4
+1126,North America,1319.29,49.1,4
+1127,North America,1092.56,90.7,4
+1128,North America,1177.82,85.0,4
+1129,Asia Pacific,1376.75,62.2,1
+1130,Asia Pacific,1050.54,66.4,3
+1131,North America,819.59,78.9,3
+1132,Asia Pacific,1270.5,68.0,2
+1133,North America,988.33,73.9,4
+1134,Europe,1096.73,57.2,4
+1135,Asia Pacific,1213.13,46.5,2
+1136,Europe,1384.31,106.0,
+1137,North America,1654.17,74.4,3
+1138,North America,1285.64,75.1,5
+1139,Asia Pacific,1228.78,79.1,1
+1140,Europe,1404.88,90.7,4
+1141,North America,1271.44,85.0,2
+1142,Europe,,57.6,3
+1143,Europe,1049.29,70.4,5
+1144,Asia Pacific,890.08,73.0,4
+1145,Asia Pacific,1374.15,82.7,5
+1146,Europe,1518.34,63.6,4
+1147,North America,1289.05,77.3,2
+1148,Asia Pacific,942.12,75.2,2
+1149,Asia Pacific,1400.29,91.3,4
+1150,Europe,959.11,35.5,5
+1001,North America,1108.23,75.5,4
+1002,Asia Pacific,660.88,55.2,1
+1003,Asia Pacific,594.63,52.6,4
+1004,Europe,1383.88,52.3,4
+1005,North America,927.23,72.2,3
+1006,Asia Pacific,1401.33,62.7,3
+1007,Europe,1212.66,78.1,1
+1008,Europe,1262.62,53.8,5
+1009,Europe,1533.33,78.9,4
+1010,North America,1181.91,63.3,4

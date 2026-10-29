@@ -1,0 +1,81 @@
+date,region,product_category,sales_amount,units_sold
+2024-01-01,North,Furniture,4875.35,32
+2024-01-02,West,Office Supplies,4314.39,46
+2024-01-03,East,Electronics,4774.07,48
+2024-01-04,South,Furniture,4102.84,15
+2024-01-05,South,Office Supplies,4282.17,15
+2024-01-06,West,Furniture,4270.96,6
+2024-01-07,North,Electronics,3782.5,11
+2024-01-08,East,Electronics,4792.18,29
+2024-01-09,North,Furniture,4218.36,29
+2024-01-10,North,Furniture,4507.5,21
+2024-01-11,East,Office Supplies,4788.45,18
+2024-01-12,West,Furniture,4767.92,42
+2024-01-13,East,Furniture,4899.23,25
+2024-01-14,West,Office Supplies,4440.91,41
+2024-01-15,East,Furniture,4246.02,48
+2024-01-16,West,Electronics,4452.17,19
+2024-01-17,East,Electronics,3487.6,14
+2024-01-18,North,Furniture,3631.73,47
+2024-01-19,West,Office Supplies,3706.38,33
+2024-01-20,South,Electronics,3901.65,18
+2024-01-21,East,Furniture,4739.86,32
+2024-01-22,South,Electronics,3956.71,28
+2024-01-23,North,Furniture,4273.1,45
+2024-01-24,West,Electronics,5279.54,16
+2024-01-25,West,Furniture,4286.24,49
+2024-01-26,East,Furniture,4942.51,47
+2024-01-27,South,Furniture,3939.83,13
+2024-01-28,West,Office Supplies,4376.74,12
+2024-01-29,East,Office Supplies,3929.99,28
+2024-01-30,South,Furniture,4296.58,7
+2024-01-31,South,Electronics,5004.18,18
+2024-02-01,North,Furniture,3463.61,24
+2024-02-02,North,Office Supplies,4760.65,48
+2024-02-03,East,Office Supplies,4642.64,49
+2024-02-04,West,Office Supplies,4143.51,11
+2024-02-05,North,Office Supplies,3632.37,45
+2024-02-06,West,Electronics,4543.28,9
+2024-02-07,West,Electronics,4182.3,38
+2024-02-08,South,Electronics,4639.61,43
+2024-02-09,East,Electronics,4513.11,45
+2024-02-10,North,Office Supplies,5461.07,15
+2024-02-11,West,Furniture,4356.39,45
+2024-02-12,East,Office Supplies,3885.9,10
+2024-02-13,South,Office Supplies,4607.57,28
+2024-02-14,North,Furniture,4632.0,26
+2024-02-15,West,Office Supplies,5315.51,19
+2024-02-16,South,Electronics,5001.07,5
+2024-02-17,West,Furniture,4714.12,39
+2024-02-18,East,Office Supplies,5377.98,20
+2024-02-19,West,Office Supplies,3786.74,34
+2024-02-20,West,Office Supplies,4116.15,23
+2024-02-21,North,Office Supplies,3944.05,21
+2024-02-22,South,Electronics,4266.11,44
+2024-02-23,South,Office Supplies,3673.99,9
+2024-02-24,South,Furniture,4881.09,38
+2024-02-25,North,Electronics,4366.67,38
+2024-02-26,East,Office Supplies,3617.52,22
+2024-02-27,North,Electronics,3890.65,16
+2024-02-28,East,Office Supplies,4688.11,5
+2024-02-29,East,Office Supplies,5002.88,47
+2024-03-01,West,Furniture,5698.04,47
+2024-03-02,East,Electronics,6248.32,15
+2024-03-03,South,Electronics,4748.65,6
+2024-03-04,West,Office Supplies,3906.28,10
+2024-03-05,South,Furniture,3220.77,8
+2024-03-06,South,Furniture,4660.63,42
+2024-03-07,West,Electronics,4012.24,45
+2024-03-08,South,Electronics,4250.79,11
+2024-03-09,North,Furniture,4132.74,38
+2024-03-10,South,Electronics,4415.53,13
+2024-03-11,West,Furniture,5139.59,21
+2024-03-12,North,Electronics,4594.23,31
+2024-03-13,South,Furniture,4404.82,37
+2024-03-14,North,Electronics,3878.61,44
+2024-03-15,East,Office Supplies,3495.19,7
+2024-03-16,South,Office Supplies,4208.22,13
+2024-03-17,South,Electronics,4467.73,17
+2024-03-18,North,Office Supplies,5560.76,18
+2024-03-19,East,Office Supplies,4578.16,49
+2024-03-20,East,Furniture,5089.64,39

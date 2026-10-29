@@ -49,8 +49,19 @@ REPORT GENERATOR  (templated + 1 LLM call for executive summary)
 FINAL OUTPUT + EXECUTION TRACE
 ```
 
-**Stack:** FastAPI · LangGraph · Pandas/NumPy · SciPy/Statsmodels ·
-Matplotlib · Streamlit · SQLite · Anthropic API (Claude)
+**Stack:** FastAPI · LangGraph · Pandas/NumPy · SciPy/Statsmodels · Matplotlib · Streamlit · SQLite · Google Gemini API (gemini-3.6-flash)
+
+## Key Features & Deliverables
+
+1. **Dynamic Architecture Selection:** The core differentiator — instead of forcing a heavy 4-agent pipeline for every simple request, the framework calculates a complexity score (0-10) and chooses between:
+   - **Level 1 (Simple):** Single General Agent.
+   - **Level 2 (Moderate):** Tool-Augmented Agent with callable pandas / statistics / chart tools.
+   - **Level 3 (Complex):** Coordinated Multi-Agent Team (Data Prep → Analysis → Insight → Validation) with a bounded 1-retry feedback loop.
+2. **Cleaned CSV Dataset Export:** Every analysis automatically produces clean, validated data with missing values imputed, duplicates purged, and data types corrected — downloadable directly as a CSV or via the `/dataset/{session_id}/download-cleaned` API.
+3. **Plain-English Data Quality Reporting:** Replaces arcane data-science jargon (skewness formulas, IQR bounds) with intuitive, executive-ready cards explaining what was wrong, what was done, and why it matters.
+4. **Transparent & Understandable Execution Trace:** An explainable timeline of every agent decision, tool invocation, and duration in plain English with optional developer audit logs.
+5. **PDF & Markdown Report Deliverable:** High-quality downloadable executive report with embedded visual charts.
+6. **Streamlined Modern UI:** An elegant, simple, professional Streamlit interface with 1-click sample demo presets. (The redundant raw EDA tab was removed in favor of clean visualizations and actionable insights).
 
 ## Project structure
 
@@ -79,7 +90,7 @@ data/
 cd backend
 pip install -r requirements.txt --break-system-packages
 
-export ANTHROPIC_API_KEY=sk-...
+export GEMINI_API_KEY=AIza...
 
 # initialize the database
 python -m app.db.connection
@@ -120,7 +131,7 @@ All six pass as of the current build.
 
 ```bash
 cd backend
-export ANTHROPIC_API_KEY=sk-...
+export GEMINI_API_KEY=AIza...
 python -m app.core.eval_runner
 ```
 

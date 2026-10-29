@@ -118,6 +118,7 @@ def run_general_agent(state: dict) -> dict:
             tool_used="select_chart_type", llm_call=False, duration_ms=t.duration_ms,
         )
 
+    state["cleaned_data"] = [df]
     state["analysis_results"] = analysis_results
     state["visualizations"] = visualizations
     state["cleaning_log"] = cleaning_log

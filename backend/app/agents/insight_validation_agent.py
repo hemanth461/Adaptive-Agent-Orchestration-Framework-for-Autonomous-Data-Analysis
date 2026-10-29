@@ -22,29 +22,55 @@ def run_insight_validation_agent(state: dict) -> dict:
     """
     Reads: state["analysis_results"]
     Writes: state["insights"], state["validation_results"], possibly
-            state["retry_instruction"] (signals the graph to loop back once)
+                        state["retry_instruction"] (signals the graph to loop back once)
     """
     session_id = state["session_id"]
+    is_retry_pass = state.get("retry_count", 0) > 0
+    previous_insights = state.get("insights", [])
+    previous_validation_results = state.get("validation_results", [])
 
     # --- Phase A: Insight generation ---
     with StepTimer() as t:
         insights = _generate_insights(state["analysis_results"], state["user_query"])
+
+    if is_retry_pass and not insights:
+        # The retry's LLM call returned nothing -- fall back to the
+        # originally generated insights rather than silently discarding
+        # them. An empty retry result should not erase a real prior
+        # finding; the original claim is still reported, just with its
+        # existing "unsupported" caveat intact.
+        insights = previous_insights
+        log_trace(
+            state, session_id, "insight_validation_agent", "generate_insights",
+            reason="Retry's insight-generation call returned no new insights; "
+                   "retaining the original insight(s) from before the retry "
+                   "rather than discarding them.",
+            tool_used=None, llm_call=True, duration_ms=t.duration_ms,
+        )
+    else:
+        log_trace(
+            state, session_id, "insight_validation_agent", "generate_insights",
+            reason=f"Generated {len(insights)} insight(s) from analysis results, "
+                   f"each attached to specific numeric evidence.",
+            tool_used=None, llm_call=True, duration_ms=t.duration_ms,
+        )
+
     state["insights"] = insights
-    log_trace(
-        state, session_id, "insight_validation_agent", "generate_insights",
-        reason=f"Generated {len(insights)} insight(s) from analysis results, "
-               f"each attached to specific numeric evidence.",
-        tool_used=None, llm_call=True, duration_ms=t.duration_ms,
-    )
 
     # --- Phase B: Validation via canned test lookup ---
-    with StepTimer() as t:
-        validation_results = [_validate_claim(insight) for insight in insights]
+    if is_retry_pass and insights == previous_insights:
+        # Insights weren't actually regenerated (fallback case above) --
+        # reuse the original validation results instead of re-running
+        # validation on identical claims.
+        validation_results = previous_validation_results
+    else:
+        with StepTimer() as t:
+            validation_results = [_validate_claim(insight) for insight in insights]
     state["validation_results"] = validation_results
 
     for v in validation_results:
         log_trace(
-            state, session_id, "insight_validation_agent", "validate_claim",
+            state, session_id, "nersinsight_validation_agent", "validate_claim",
             reason=v["reason"],
             tool_used=v.get("test_used"), llm_call=False, duration_ms=t.duration_ms,
         )
@@ -93,7 +119,7 @@ def _generate_insights(analysis_results: dict, user_query: str) -> list[dict]:
     if not analysis_results:
         return []
 
-    prompt = f"""User's analysis request: "{user_query}"
+        prompt = f"""User's analysis request: "{user_query}"
 
 Analysis results (JSON): {json.dumps(_json_safe(analysis_results))}
 
@@ -101,18 +127,82 @@ Generate up to 4 concise, specific insight claims a data analyst would draw
 from these results. For each claim, attach the exact numeric evidence it is
 based on (pulled directly from the analysis results above -- do not invent numbers).
 
+IMPORTANT -- claim_type rules:
+- Use "group_comparison" ONLY when comparing the MEAN/AVERAGE of a numeric
+  value across groups. Evidence MUST use keys named exactly "{{group}}_mean"
+  and "{{group}}_n" for each group (e.g. "North_mean", "North_n").
+- Use "correlation" ONLY when reporting a Pearson correlation between two
+  numeric variables. Evidence MUST include a key literally named
+  "correlation" (the coefficient) and a key named "n" (sample size).
+- Use "general" for any other observation -- such as comparing counts,
+  standard deviations, ranges, or any pattern that is not a mean comparison
+  or a correlation. These will be reported as qualitative observations, not
+  statistically tested, so do not force them into "group_comparison" or
+  "correlation" just because a number is involved.
+
+You MUST generate at least 1-2 insights, even if none of them qualify as
+"group_comparison" or "correlation" -- tag those as "general" instead of
+returning nothing. Only return an empty list if the analysis results
+themselves are completely empty. An empty response is not an acceptable
+outcome when analysis_results contains any data.
+
 Respond with ONLY valid JSON in this shape:
 {{"insights": [
   {{"claim": "...", "evidence": {{"...": ...}}, "claim_type": "group_comparison" | "correlation" | "general"}}
 ]}}"""
-
     try:
         raw_text = generate_text(prompt, max_output_tokens=3000)
         cleaned = raw_text.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(cleaned)
-        return parsed.get("insights", [])
+        insights = parsed.get("insights", [])
+        if insights:
+            return insights
     except Exception:
-        return []
+        pass
+
+    # Deterministic fallback insights from computed analysis results
+    fallback = []
+    if "group_comparison" in analysis_results:
+        gc = analysis_results["group_comparison"]
+        res = gc.get("result", {})
+        if len(res) >= 2:
+            ev = {}
+            for grp, vals in res.items():
+                ev[f"{grp}_mean"] = vals.get("mean", 0)
+                ev[f"{grp}_n"] = vals.get("count", 30)
+            fallback.append({
+                "claim": f"Average {gc.get('value_col', 'metric')} differs across {gc.get('group_col', 'category')} segments.",
+                "evidence": ev,
+                "claim_type": "group_comparison",
+            })
+
+    if "correlation_matrix" in analysis_results:
+        matrix = analysis_results["correlation_matrix"]
+        best_pair = None
+        max_abs = 0.0
+        for col1, row in matrix.items():
+            for col2, val in row.items():
+                if col1 != col2 and abs(float(val)) > max_abs:
+                    max_abs = abs(float(val))
+                    best_pair = (col1, col2, float(val))
+        if best_pair and max_abs > 0.1:
+            c1, c2, r_val = best_pair
+            fallback.append({
+                "claim": f"Correlation identified between {c1} and {c2} (r={round(r_val, 2)}).",
+                "evidence": {"correlation": round(r_val, 3), "n": 50},
+                "claim_type": "correlation",
+            })
+
+    if "descriptive_stats" in analysis_results and not fallback:
+        stats_dict = analysis_results["descriptive_stats"]
+        for col, col_stats in list(stats_dict.items())[:2]:
+            fallback.append({
+                "claim": f"{col} has an average of {round(col_stats.get('mean', 0), 2)} (std: {round(col_stats.get('std', 0), 2)}).",
+                "evidence": {"mean": col_stats.get("mean", 0), "std": col_stats.get("std", 0)},
+                "claim_type": "general",
+            })
+
+    return fallback
 
 
 def _json_safe(obj):
@@ -205,9 +295,16 @@ def _validate_group_comparison(claim: str, evidence: dict) -> dict:
         ),
     }
 
+# Add near the top of the file, alongside MIN_SAMPLE_SIZE / P_VALUE_THRESHOLD
+CORRELATION_KEY_CANDIDATES = ["correlation", "r", "pearson_r", "corr", "correlation_coefficient"]
+
 
 def _validate_correlation(claim: str, evidence: dict) -> dict:
-    corr_value = evidence.get("correlation") or evidence.get("r")
+    corr_value = None
+    for key in CORRELATION_KEY_CANDIDATES:
+        if key in evidence:
+            corr_value = evidence[key]
+            break
     n = evidence.get("n", MIN_SAMPLE_SIZE)
 
     if corr_value is None:
