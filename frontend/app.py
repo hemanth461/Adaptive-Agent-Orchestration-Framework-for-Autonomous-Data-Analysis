@@ -460,6 +460,8 @@ if result:
     n_cleaning_actions = len(result.get("cleaning_log", []))
     n_charts = len(result.get("visualizations", []))
     n_insights = len(result.get("validation_results", []))
+    col_fixes = max(0, n_cleaning_actions - (1 if rows_dropped > 0 else 0))
+    health_sub = f"{rows_dropped:,} dupes + {col_fixes} col fixes" if rows_dropped > 0 else f"{n_cleaning_actions} column remediations"
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
@@ -479,7 +481,7 @@ if result:
             <div class="metric-card">
                 <div class="metric-title">Data Health Fixes</div>
                 <div class="metric-value">{n_cleaning_actions}</div>
-                <div class="metric-sub">Across columns & dupes</div>
+                <div class="metric-sub">{health_sub}</div>
             </div>
             """,
             unsafe_allow_html=True,

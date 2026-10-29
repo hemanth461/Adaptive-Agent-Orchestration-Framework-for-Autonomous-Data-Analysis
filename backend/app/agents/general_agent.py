@@ -69,6 +69,11 @@ def run_general_agent(state: dict) -> dict:
             )
 
     column_profile = state["dataset_profile"]["datasets"][0]["columns"]
+    for col in df.columns:
+        if col in column_profile:
+            column_profile[col]["is_numeric"] = bool(pd.api.types.is_numeric_dtype(df[col]))
+            column_profile[col]["dtype"] = str(df[col].dtype)
+            column_profile[col]["missing_pct"] = round(float(df[col].isna().mean() * 100), 2)
 
     analysis_results = {}
     visualizations = []
@@ -91,6 +96,23 @@ def run_general_agent(state: dict) -> dict:
             reason="Computed pairwise Pearson correlation across numeric columns.",
             tool_used="correlation_matrix", llm_call=False, duration_ms=t.duration_ms,
         )
+
+    if "group_comparison" in operations:
+        with StepTimer() as t:
+            cat_cols = [c for c, m in column_profile.items() if not m.get("is_numeric") and m.get("n_unique", 99) <= 20]
+            num_cols = [c for c, m in column_profile.items() if m.get("is_numeric") and not (c.lower().endswith("_id") or c.lower() == "id")]
+            if cat_cols and num_cols:
+                analysis_results["group_comparison"] = {
+                    "group_col": cat_cols[0],
+                    "value_col": num_cols[0],
+                    "result": tools.groupby_compare(df, cat_cols[0], num_cols[0]),
+                }
+        if "group_comparison" in analysis_results:
+            log_trace(
+                state, session_id, "general_agent", "group_comparison",
+                reason=f"Compared '{num_cols[0]}' across groups of '{cat_cols[0]}'.",
+                tool_used="groupby_compare", llm_call=False, duration_ms=t.duration_ms,
+            )
 
     # --- Visualization operations: use rule-based chart selection, then filter
     #     to only what the user actually asked for (or all recommendations if
@@ -132,13 +154,29 @@ def _get_primary_dataframe(state: dict) -> pd.DataFrame:
 
 def _clean_missing_values_simple(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     """
-    Deterministic mean/median imputation based on skew, with no LLM call --
-    a cheaper version of the Data Prep Agent's approach, appropriate for the
-    Moderate task level (see PRD Section 10, Level 2: "One Primary Agent +
-    Specialized Tools", not the full multi-agent chain).
+    Deterministic dirty numeric coercion and mean/median imputation based on skew,
+    with no LLM call -- appropriate for the Moderate task level.
     """
     entries = []
     df = df.copy()
+
+    # Step 1: Detect and coerce dirty numeric columns (where >= 50% non-null values are numbers)
+    for col in df.select_dtypes(include="object").columns:
+        sample = df[col].dropna()
+        if len(sample) > 0:
+            coerced = pd.to_numeric(sample, errors="coerce")
+            if (coerced.notna().sum() / len(sample)) >= 0.5:
+                dirty_count = int((sample.notna() & coerced.isna()).sum())
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+                if dirty_count > 0:
+                    entries.append({
+                        "column_name": col,
+                        "issue_type": "invalid_values",
+                        "strategy_applied": "coerce_to_numeric",
+                        "reason": f"Coerced {dirty_count} invalid non-numeric text values to NaN in numeric column '{col}'.",
+                    })
+
+    # Step 2: Impute missing values
     missing_cols = df.columns[df.isna().any()].tolist()
 
     for col in missing_cols:

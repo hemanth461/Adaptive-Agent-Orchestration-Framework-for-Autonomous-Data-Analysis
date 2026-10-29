@@ -87,6 +87,18 @@ def run_data_prep_agent(state: dict) -> dict:
     df = _get_working_dataframe(state)
     cleaning_log = []
 
+    # --- Detect dtype issues (numeric-looking strings) first so text tokens become NaN ---
+    with StepTimer() as t:
+        df, dtype_entries = _fix_dtype_issues(df)
+    if dtype_entries:
+        cleaning_log.extend(dtype_entries)
+        log_trace(
+            state, session_id, "data_prep_agent", "fix_dtype_issues",
+            reason=f"Corrected {len(dtype_entries)} column(s) with dtype mismatches "
+                   f"(e.g. numeric values stored as strings).",
+            tool_used="fix_dtype_issues", llm_call=False, duration_ms=t.duration_ms,
+        )
+
     # --- Detect + handle missing values ---
     missing_cols = df.columns[df.isna().any()].tolist()
     if missing_cols:
@@ -118,18 +130,6 @@ def run_data_prep_agent(state: dict) -> dict:
             tool_used="drop_duplicates", llm_call=False, duration_ms=t.duration_ms,
         )
 
-    # --- Detect dtype issues (numeric-looking strings) ---
-    with StepTimer() as t:
-        df, dtype_entries = _fix_dtype_issues(df)
-    if dtype_entries:
-        cleaning_log.extend(dtype_entries)
-        log_trace(
-            state, session_id, "data_prep_agent", "fix_dtype_issues",
-            reason=f"Corrected {len(dtype_entries)} column(s) with dtype mismatches "
-                   f"(e.g. numeric values stored as strings).",
-            tool_used="fix_dtype_issues", llm_call=False, duration_ms=t.duration_ms,
-        )
-
     # --- Detect outliers (IQR method) -- flagged, not removed ---
     with StepTimer() as t:
         outlier_entries = _detect_outliers_iqr(df)
@@ -145,6 +145,16 @@ def run_data_prep_agent(state: dict) -> dict:
 
     state["cleaned_data"] = [df]
     state["cleaning_log"] = cleaning_log
+
+    # Refresh dataset profile with cleaned metadata so downstream agents have updated types
+    if "dataset_profile" in state and "datasets" in state["dataset_profile"]:
+        for ds_meta in state["dataset_profile"]["datasets"]:
+            col_meta = ds_meta.get("columns", {})
+            for col in df.columns:
+                if col in col_meta:
+                    col_meta[col]["is_numeric"] = bool(pd.api.types.is_numeric_dtype(df[col]))
+                    col_meta[col]["dtype"] = str(df[col].dtype)
+                    col_meta[col]["missing_pct"] = round(float(df[col].isna().mean() * 100), 2)
 
     # Persist cleaning_log to its own table too (not just execution_trace)
     _persist_cleaning_log(session_id, cleaning_log)
@@ -239,18 +249,19 @@ Respond with ONLY valid JSON mapping column name to strategy, e.g.:
 def _fix_dtype_issues(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     """Detect object columns that are actually numeric and convert them."""
     entries = []
+    df = df.copy()
     for col in df.select_dtypes(include="object").columns:
         converted = pd.to_numeric(df[col], errors="coerce")
-        # If most non-null values convert successfully, treat it as a numeric column
         non_null = df[col].notna().sum()
-        if non_null > 0 and converted.notna().sum() / non_null > 0.9:
+        if non_null > 0 and (converted.notna().sum() / non_null) >= 0.5:
+            n_dirty = int((df[col].notna() & converted.isna()).sum())
             df[col] = converted
             entries.append({
                 "column_name": col,
                 "issue_type": "dtype",
                 "strategy_applied": "convert_to_numeric",
-                "reason": f"Column '{col}' contained numeric values stored as text; "
-                          f"converted to numeric dtype for correct downstream analysis.",
+                "reason": f"Column '{col}' contained numeric values with {n_dirty} text values; "
+                          f"converted to numeric float64 for correct downstream analysis.",
             })
     return df, entries
 

@@ -83,7 +83,10 @@ def groupby_compare(df: pd.DataFrame, group_col: str, value_col: str, max_groups
 
 def plot_bar(df: pd.DataFrame, category_col: str, value_col: str, session_id: str) -> dict:
     out_dir = _ensure_output_dir(session_id)
-    grouped = df.groupby(category_col)[value_col].mean().sort_values(ascending=False)
+    plot_df = df[[category_col, value_col]].copy()
+    plot_df[value_col] = pd.to_numeric(plot_df[value_col], errors="coerce")
+    plot_df = plot_df.dropna(subset=[value_col])
+    grouped = plot_df.groupby(category_col)[value_col].mean().dropna().sort_values(ascending=False)
     # If high cardinality, take top 12 to ensure legible presentation
     if len(grouped) > 12:
         grouped = grouped.head(12)
@@ -102,14 +105,28 @@ def plot_bar(df: pd.DataFrame, category_col: str, value_col: str, session_id: st
 def plot_line(df: pd.DataFrame, time_col: str, value_col: str, session_id: str) -> dict:
     out_dir = _ensure_output_dir(session_id)
     plot_df = df[[time_col, value_col]].dropna().copy()
-    plot_df[time_col] = pd.to_datetime(plot_df[time_col], errors="coerce")
-    plot_df = plot_df.sort_values(time_col)
+    # Check if time_col looks like datetime
+    dt_series = pd.to_datetime(plot_df[time_col], errors="coerce")
+    is_date = bool(dt_series.notna().sum() > len(plot_df) * 0.5) if len(plot_df) > 0 else False
+    if is_date:
+        plot_df[time_col] = dt_series
+        plot_df = plot_df.dropna(subset=[time_col]).sort_values(time_col)
+    else:
+        num_x = pd.to_numeric(plot_df[time_col], errors="coerce")
+        if num_x.notna().sum() > len(plot_df) * 0.5:
+            plot_df[time_col] = num_x
+            plot_df = plot_df.dropna(subset=[time_col]).sort_values(time_col)
+
+    plot_df[value_col] = pd.to_numeric(plot_df[value_col], errors="coerce")
+    plot_df = plot_df.dropna(subset=[value_col])
+
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.plot(plot_df[time_col], plot_df[value_col], color="#55A868")
-    ax.set_title(f"{value_col} over time")
+    ax.plot(plot_df[time_col], plot_df[value_col], color="#55A868", marker="o" if len(plot_df) < 50 else None, markersize=3)
+    ax.set_title(f"{value_col} over {time_col}" if is_date else f"{value_col} vs {time_col} Trend")
     ax.set_xlabel(time_col)
     ax.set_ylabel(value_col)
-    fig.autofmt_xdate()
+    if is_date:
+        fig.autofmt_xdate()
     fig.tight_layout()
     path = os.path.join(out_dir, f"line_{time_col}_{value_col}.png")
     fig.savefig(path, dpi=110)
@@ -119,8 +136,9 @@ def plot_line(df: pd.DataFrame, time_col: str, value_col: str, session_id: str) 
 
 def plot_histogram(df: pd.DataFrame, col: str, session_id: str) -> dict:
     out_dir = _ensure_output_dir(session_id)
+    series = pd.to_numeric(df[col], errors="coerce").dropna()
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    df[col].dropna().plot(kind="hist", bins=25, ax=ax, color="#C44E52")
+    series.plot(kind="hist", bins=25, ax=ax, color="#C44E52")
     ax.set_title(f"Distribution of {col}")
     ax.set_xlabel(col)
     fig.tight_layout()
@@ -132,8 +150,12 @@ def plot_histogram(df: pd.DataFrame, col: str, session_id: str) -> dict:
 
 def plot_scatter(df: pd.DataFrame, col_x: str, col_y: str, session_id: str) -> dict:
     out_dir = _ensure_output_dir(session_id)
+    plot_df = df[[col_x, col_y]].copy()
+    plot_df[col_x] = pd.to_numeric(plot_df[col_x], errors="coerce")
+    plot_df[col_y] = pd.to_numeric(plot_df[col_y], errors="coerce")
+    plot_df = plot_df.dropna()
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    ax.scatter(df[col_x], df[col_y], alpha=0.6, color="#8172B2", s=18)
+    ax.scatter(plot_df[col_x], plot_df[col_y], alpha=0.6, color="#8172B2", s=18)
     ax.set_title(f"{col_y} vs {col_x}")
     ax.set_xlabel(col_x)
     ax.set_ylabel(col_y)
@@ -146,12 +168,18 @@ def plot_scatter(df: pd.DataFrame, col_x: str, col_y: str, session_id: str) -> d
 
 def plot_heatmap(df: pd.DataFrame, session_id: str, max_cols: int = 12) -> dict:
     out_dir = _ensure_output_dir(session_id)
-    numeric_df = df.select_dtypes(include=[np.number])
+    numeric_df = df.select_dtypes(include=[np.number]).copy()
+    for col in df.columns:
+        if col not in numeric_df.columns:
+            s_num = pd.to_numeric(df[col], errors="coerce")
+            if s_num.notna().sum() >= len(df) * 0.5:
+                numeric_df[col] = s_num
+
     id_like = [c for c in numeric_df.columns if c.lower().endswith("_id") or c.lower() == "id"]
     numeric_df = numeric_df.drop(columns=id_like)
 
     # Filter out columns with zero variance (constants or mostly empty)
-    valid_cols = [c for c in numeric_df.columns if numeric_df[c].std() > 1e-5]
+    valid_cols = [c for c in numeric_df.columns if numeric_df[c].dropna().std() > 1e-5]
     numeric_df = numeric_df[valid_cols]
 
     if numeric_df.shape[1] < 2:
@@ -211,13 +239,27 @@ def select_chart_type(df: pd.DataFrame, column_profile: dict) -> list[dict]:
     recommendations = []
     numeric_cols = [
         c for c, meta in column_profile.items()
-        if meta["is_numeric"] and not (c.lower().endswith("_id") or c.lower() == "id")
+        if meta.get("is_numeric") and not (c.lower().endswith("_id") or c.lower() == "id")
     ]
-    datetime_cols = [c for c, meta in column_profile.items() if meta["is_datetime"]]
+    if not numeric_cols:
+        numeric_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns
+            if not (c.lower().endswith("_id") or c.lower() == "id")
+        ]
+
+    datetime_cols = [c for c, meta in column_profile.items() if meta.get("is_datetime")]
+    if not datetime_cols:
+        datetime_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
+
     categorical_cols = [
         c for c, meta in column_profile.items()
-        if not meta["is_numeric"] and not meta["is_datetime"] and meta["n_unique"] <= 20
+        if not meta.get("is_numeric") and not meta.get("is_datetime") and meta.get("n_unique", 999) <= 20
     ]
+    if not categorical_cols:
+        categorical_cols = [
+            c for c in df.select_dtypes(include=["object", "category"]).columns
+            if df[c].nunique(dropna=True) <= 20 and not (c.lower().endswith("_id") or c.lower() == "id")
+        ]
 
     if datetime_cols and numeric_cols:
         recommendations.append({
@@ -225,6 +267,12 @@ def select_chart_type(df: pd.DataFrame, column_profile: dict) -> list[dict]:
             "columns": [datetime_cols[0], numeric_cols[0]],
             "rule_reason": "Dataset contains a time-based column paired with a numeric "
                             "column, indicating a trend-over-time relationship.",
+        })
+    elif len(numeric_cols) >= 2:
+        recommendations.append({
+            "chart_type": "line_chart",
+            "columns": [numeric_cols[0], numeric_cols[1]],
+            "rule_reason": f"Sequential trend relationship between '{numeric_cols[0]}' and '{numeric_cols[1]}'.",
         })
 
     if categorical_cols and numeric_cols:
@@ -234,6 +282,14 @@ def select_chart_type(df: pd.DataFrame, column_profile: dict) -> list[dict]:
             "rule_reason": "A categorical column and a numeric column suggest a "
                             "category comparison, best shown as a bar chart.",
         })
+    elif numeric_cols:
+        cat_candidates = [c for c in df.columns if df[c].nunique(dropna=True) <= 25 and not (c.lower().endswith("_id") or c.lower() == "id")]
+        if cat_candidates:
+            recommendations.append({
+                "chart_type": "bar_chart",
+                "columns": [cat_candidates[0], numeric_cols[0]],
+                "rule_reason": "Comparison across discrete groups shown as a bar chart.",
+            })
 
     if len(numeric_cols) >= 2:
         recommendations.append({

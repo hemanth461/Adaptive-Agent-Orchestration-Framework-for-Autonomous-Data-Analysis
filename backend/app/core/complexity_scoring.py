@@ -133,22 +133,25 @@ Dataset profile summary: {profile_summary}
 Rule-based score: {score} (borderline between {level_a} and {level_b})
 
 In one sentence, does this task genuinely require independent specialized agents
-(e.g. separate reliability checking, multi-step dependent analysis), or can a
+(e.g. separate reliability checking, statistical hypothesis validation, multi-step dependent analysis), or can a
 single well-tooled agent handle it end-to-end?
+Note: If statistical validation or significance testing across groups is requested, choose 'complex' so the specialized Insight & Validation Agent is invoked.
 
 Respond with ONLY valid JSON: {{"level": "{level_a}" or "{level_b}", "reason": "..."}}"""
+
+    default_level = level_b if ("statistical_validation" in task_operations and level_b == "complex") else level_a
 
     try:
         raw_text = generate_text(prompt=prompt, max_output_tokens=2048)
         cleaned = raw_text.replace("```json", "").replace("```", "").strip()
         result = json.loads(cleaned)
         if result.get("level") not in (level_a, level_b):
-            result["level"] = level_a  # fail toward the lower-complexity option
+            result["level"] = default_level
         return result
     except Exception:
         return {
-            "level": level_a,
-            "reason": f"Rule-based threshold score used; classified as {level_a} for computational efficiency."
+            "level": default_level,
+            "reason": f"Rule-based threshold score used; classified as {default_level} based on validation requirements."
         }
 
 

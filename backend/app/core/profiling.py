@@ -39,11 +39,20 @@ def profile_single_dataset(df: pd.DataFrame, name: str) -> dict:
     per_column = {}
     for col in df.columns:
         col_series = df[col]
+        is_num = bool(pd.api.types.is_numeric_dtype(col_series))
+        if not is_num:
+            # Detect dirty numeric columns (e.g. numbers mixed with 'unknown', '?', 'N/A')
+            sample = col_series.dropna().astype(str).str.strip()
+            if len(sample) > 0:
+                coerced = pd.to_numeric(sample, errors="coerce")
+                if (coerced.notna().sum() / len(sample)) >= 0.5:
+                    is_num = True
+
         per_column[col] = {
             "dtype": str(col_series.dtype),
             "missing_pct": round(float(col_series.isna().mean() * 100), 2),
             "n_unique": int(col_series.nunique(dropna=True)),
-            "is_numeric": bool(pd.api.types.is_numeric_dtype(col_series)),
+            "is_numeric": is_num,
             "is_datetime": bool(
                 pd.api.types.is_datetime64_any_dtype(col_series)
                 or _looks_like_datetime(col_series)
