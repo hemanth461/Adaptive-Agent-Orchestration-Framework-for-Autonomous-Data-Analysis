@@ -16,6 +16,8 @@ queue). Fine for small datasets and a single-user demo context.
 import io
 import os
 import json
+import math
+import traceback
 
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -47,7 +49,7 @@ def health():
 
 
 @app.post("/analyze")
-async def analyze(
+def analyze(
     files: list[UploadFile] = File(...),
     query: str = Form(...),
 ):
@@ -67,7 +69,7 @@ async def analyze(
     for f in files:
         if not f.filename.lower().endswith(".csv"):
             raise HTTPException(status_code=400, detail=f"Only CSV files are supported: {f.filename}")
-        content = await f.read()
+        content = f.file.read()
         if not content or len(content.strip()) == 0:
             raise HTTPException(status_code=400, detail=f"File is empty: {f.filename}")
         try:
@@ -89,7 +91,11 @@ async def analyze(
     if not dataframes:
         raise HTTPException(status_code=400, detail="No valid files uploaded.")
 
-    result = run_session(dataframes, dataset_names, query)
+    try:
+        result = run_session(dataframes, dataset_names, query)
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analysis pipeline error: {str(exc)}")
 
     return _serialize_result(result)
 
@@ -165,8 +171,21 @@ def get_chart(session_id: str, filename: str):
     return FileResponse(path)
 
 
+def _clean_for_json(obj):
+    """Recursively replace NaN, Infinity, -Infinity with None for RFC-compliant JSON."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _clean_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_clean_for_json(x) for x in obj]
+    return obj
+
+
 def _serialize_result(state: dict) -> dict:
-    """Strip non-JSON-serializable fields (dataframes) before returning to the client."""
+    """Strip non-JSON-serializable fields (dataframes) and sanitize NaNs before returning."""
     exclude = {"raw_datasets", "cleaned_data"}
     serialized = {k: v for k, v in state.items() if k not in exclude}
 
@@ -177,11 +196,16 @@ def _serialize_result(state: dict) -> dict:
         serialized["cleaned_csv_filename"] = state.get("cleaned_csv_filename", "cleaned_dataset.csv")
         serialized["cleaned_rows"] = int(len(df_clean))
         serialized["cleaned_columns"] = [str(c) for c in df_clean.columns]
-        serialized["cleaned_preview"] = json.loads(
-            df_clean.head(25).to_json(orient="records", date_format="iso")
-        )
-        serialized["cleaned_csv_text"] = df_clean.to_csv(index=False)
+        # Clean preview records to avoid NaNs
+        preview_df = df_clean.head(25).fillna("")
+        serialized["cleaned_preview"] = preview_df.to_dict(orient="records")
+        # Only embed inline CSV text for smaller files to avoid bloating HTTP payload
+        if len(df_clean) <= 500:
+            serialized["cleaned_csv_text"] = df_clean.to_csv(index=False)
+        else:
+            serialized["cleaned_csv_text"] = None
     else:
         serialized["cleaned_csv_available"] = False
+        serialized["cleaned_csv_text"] = None
 
-    return serialized
+    return _clean_for_json(serialized)

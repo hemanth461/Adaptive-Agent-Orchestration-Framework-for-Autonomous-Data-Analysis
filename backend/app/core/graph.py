@@ -35,9 +35,16 @@ def _report_node(state: dict) -> dict:
         state["cleaned_csv_path"] = csv_path
         state["cleaned_csv_filename"] = csv_filename
 
-    generate_report(state)
-    pdf_path = generate_pdf_report(state)
-    state["report_pdf_path"] = pdf_path
+    try:
+        generate_report(state)
+    except Exception as e:
+        state["final_report"] = f"# Data Analysis Report\n\nCould not generate full report text: {e}"
+
+    try:
+        pdf_path = generate_pdf_report(state)
+        state["report_pdf_path"] = pdf_path
+    except Exception as e:
+        state["report_pdf_path"] = None
     return state
 
 

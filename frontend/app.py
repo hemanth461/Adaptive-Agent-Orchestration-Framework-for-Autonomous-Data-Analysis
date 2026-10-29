@@ -390,8 +390,15 @@ if run_submitted:
                     data={"query": query_input},
                     timeout=180,
                 )
-                response.raise_for_status()
-                st.session_state.result = response.json()
+                if response.status_code == 200:
+                    st.session_state.result = response.json()
+                else:
+                    detail = response.text
+                    try:
+                        detail = response.json().get("detail", detail)
+                    except Exception:
+                        pass
+                    st.error(f"Analysis failed (HTTP {response.status_code}): {detail}")
             except requests.exceptions.RequestException as e:
                 st.error(f"Failed to connect to backend: {e}")
 
