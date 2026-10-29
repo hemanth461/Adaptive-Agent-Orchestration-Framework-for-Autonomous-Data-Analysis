@@ -3,8 +3,8 @@
 python -m uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --app-dir backend &
 
 # 2. Wait for backend to be ready
-for i in {1..10}; do
-  if curl -s http://127.0.0.1:8000/health > /dev/null; then
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -s http://127.0.0.1:8000/health > /dev/null 2>&1; then
     echo "Backend is ready!"
     break
   fi
