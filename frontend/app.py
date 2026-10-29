@@ -27,15 +27,19 @@ API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000")
 SAMPLE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data", "sample_datasets"))
 
 # --- Auto-start Backend if running together in a unified deployment ---
+@st.cache_resource
 def _ensure_backend_running():
     if "127.0.0.1" in API_BASE or "localhost" in API_BASE:
-        try:
-            r = requests.get(f"{API_BASE}/health", timeout=0.8)
-            if r.status_code == 200:
-                return
-        except Exception:
-            pass
+        # Check if already running
+        for _ in range(3):
+            try:
+                r = requests.get(f"{API_BASE}/health", timeout=1.0)
+                if r.status_code == 200:
+                    return True
+            except Exception:
+                time.sleep(1)
 
+        # Fallback start if running standalone
         backend_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "backend"))
         if os.path.isdir(backend_dir):
             try:
@@ -47,6 +51,7 @@ def _ensure_backend_running():
                 time.sleep(2.5)
             except Exception:
                 pass
+    return True
 
 _ensure_backend_running()
 
@@ -736,9 +741,21 @@ if result:
                         use_container_width=True,
                     )
                 else:
-                    # Direct link from FastAPI endpoint
-                    endpoint_url = f"{API_BASE}/dataset/{session_id}/download-cleaned"
-                    st.link_button("⬇️ Download Cleaned CSV", endpoint_url, use_container_width=True)
+                    try:
+                        csv_resp = requests.get(f"{API_BASE}/dataset/{session_id}/download-cleaned", timeout=10)
+                        if csv_resp.status_code == 200:
+                            st.download_button(
+                                label="⬇️ Download Cleaned CSV File",
+                                data=csv_resp.content,
+                                file_name=f"cleaned_dataset_{session_id[:8]}.csv",
+                                mime="text/csv",
+                                type="primary",
+                                use_container_width=True,
+                            )
+                        else:
+                            st.caption("Cleaned CSV currently unavailable.")
+                    except Exception:
+                        st.caption("Cleaned CSV currently unavailable.")
 
             # Table preview
             st.markdown("#### 📋 Cleaned Data Preview")
@@ -765,14 +782,29 @@ if result:
         vizs = result.get("visualizations", [])
         if vizs:
             for i, v in enumerate(vizs):
-                filename = os.path.basename(v["path"])
-                img_url = f"{API_BASE}/chart/{session_id}/{filename}"
+                filename = os.path.basename(v.get("path", ""))
                 chart_name = v.get("type", "chart").replace("_", " ").title()
                 cols = ", ".join(v.get("columns", []))
 
+                # Load image from local disk path or fetch bytes server-side
+                img_data = None
+                img_path = v.get("path")
+                if img_path and os.path.isfile(img_path):
+                    img_data = img_path
+                else:
+                    try:
+                        resp = requests.get(f"{API_BASE}/chart/{session_id}/{filename}", timeout=6)
+                        if resp.status_code == 200:
+                            img_data = resp.content
+                    except Exception:
+                        pass
+
                 with st.container():
                     st.markdown(f"#### 📊 {chart_name} ({cols})")
-                    st.image(img_url, use_container_width=True)
+                    if img_data:
+                        st.image(img_data, use_container_width=True)
+                    else:
+                        st.warning(f"Could not load chart image for {filename}.")
                     st.caption(f"**Design Rationale:** {v.get('reason', '')}")
                     st.markdown("---")
         else:
