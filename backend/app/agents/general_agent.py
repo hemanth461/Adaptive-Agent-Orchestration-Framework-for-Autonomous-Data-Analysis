@@ -160,13 +160,19 @@ def _clean_missing_values_simple(df: pd.DataFrame) -> tuple[pd.DataFrame, list[d
     entries = []
     df = df.copy()
 
-    # Step 1: Clean text formatting (whitespace, casing collisions)
+    # Step 1: Clean text formatting (whitespace, casing collisions, state abbreviations)
     for col in df.select_dtypes(include="object").columns:
         original = df[col].copy()
-        cleaned = df[col].astype(str).str.strip()
-        cleaned = cleaned.replace({"nan": np.nan, "None": np.nan, "": np.nan})
+        cleaned = df[col].apply(lambda x: str(x).strip() if pd.notna(x) and str(x).strip() not in {"nan", "None", ""} else np.nan)
         non_null = cleaned.dropna()
-        if len(non_null) > 0 and non_null.nunique() <= 30:
+        if len(non_null) == 0:
+            continue
+
+        # Check if column contains short codes (e.g. 2-3 letter state abbreviations: 'AL', '  IL  ', ' tn ')
+        is_short_code = (non_null.str.len().between(2, 3) & non_null.str.isalpha()).mean() > 0.7
+        if is_short_code:
+            new_series = cleaned.apply(lambda x: str(x).upper() if pd.notna(x) else np.nan)
+        elif non_null.nunique() <= 120:
             lower_counts = non_null.str.lower().value_counts()
             canonical_map = {}
             for low_val in lower_counts.index:
@@ -175,17 +181,18 @@ def _clean_missing_values_simple(df: pd.DataFrame) -> tuple[pd.DataFrame, list[d
                 clean_rep = rep.lower().replace("iris-", "").replace("iris_", "").strip()
                 canonical_map[low_val] = clean_rep
             new_series = cleaned.apply(lambda x: canonical_map.get(str(x).lower(), x) if pd.notna(x) else np.nan)
-            diffs = int((new_series != original).sum())
-            if diffs > 0:
-                df[col] = new_series
-                entries.append({
-                    "column_name": col,
-                    "issue_type": "inconsistent_formatting",
-                    "strategy_applied": "standardize_text_casing",
-                    "reason": f"Standardized whitespace and inconsistent casing for {diffs} value(s) in '{col}'.",
-                })
         else:
-            df[col] = cleaned
+            new_series = cleaned
+
+        diffs = int((new_series.fillna("__NA__") != original.fillna("__NA__")).sum())
+        if diffs > 0:
+            df[col] = new_series
+            entries.append({
+                "column_name": col,
+                "issue_type": "inconsistent_formatting",
+                "strategy_applied": "standardize_text_casing",
+                "reason": f"Standardized whitespace and inconsistent casing for {diffs} value(s) in '{col}'.",
+            })
 
     # Step 2: Detect and coerce dirty numeric columns (where >= 50% non-null values are numbers)
     for col in df.select_dtypes(include="object").columns:

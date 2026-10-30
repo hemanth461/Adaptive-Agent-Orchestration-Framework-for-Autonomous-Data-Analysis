@@ -151,11 +151,12 @@ def _run_retry_analysis(state: dict, df: pd.DataFrame) -> dict:
 def _pick_group_comparison_columns(column_profile: dict) -> tuple[str | None, str | None]:
     categorical_cols = [
         c for c, meta in column_profile.items()
-        if not meta["is_numeric"] and not meta["is_datetime"] and meta["n_unique"] <= 20
+        if not meta.get("is_numeric") and not meta.get("is_datetime") and 2 <= meta.get("n_unique", 999) <= 120
+        and not _looks_like_id_column(c, meta)
     ]
     numeric_cols = [
         c for c, meta in column_profile.items()
-        if meta["is_numeric"] and not _looks_like_id_column(c, meta)
+        if meta.get("is_numeric") and not _looks_like_id_column(c, meta)
     ]
     group_col = categorical_cols[0] if categorical_cols else None
     value_col = numeric_cols[0] if numeric_cols else None
