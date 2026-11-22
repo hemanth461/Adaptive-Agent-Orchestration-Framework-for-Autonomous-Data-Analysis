@@ -53,11 +53,13 @@ The **Adaptive Agent Orchestration Framework** introduces an intelligent, cost-s
 
 ---
 
-### 3. Publication-Grade Visual Analytics
-> Dual-pattern visualization engine automatically tailors chart designs: clustered category profiles for grouped data and ranked dual-panel comparisons (Top 10 Highest vs. Lowest) for entity/regional datasets.
+### 3. Publication-Grade Visual Analytics & Progression Curves
+> Dual-pattern visualization engine automatically tailors chart designs: ranked dual-panel comparisons (Top 10 Highest vs. Lowest) and smooth progression curves tracking primary metrics against secondary risk factors and national averages.
 
 <div align="center">
-  <img src="docs/screenshots/03_visual_analytics.png" alt="Visual Analytics" width="95%" />
+  <img src="docs/screenshots/03_visual_analytics.png" alt="Entity Ranking Bar Chart" width="95%" />
+  <br><br>
+  <img src="docs/screenshots/03_line_progression_trends.png" alt="Progression and Risk Factor Trends" width="95%" />
 </div>
 
 ---
